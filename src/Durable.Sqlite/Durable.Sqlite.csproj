@@ -5,7 +5,7 @@
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<ApplicationIcon>logo.ico</ApplicationIcon>
 		<DocumentationFile>Durable.Sqlite.xml</DocumentationFile>
-		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<GeneratePackageOnBuild>False</GeneratePackageOnBuild>
 		<Title>Durable.Sqlite</Title>
 		<Version>0.1.21</Version>
 		<Authors>jchristn,joshclopton</Authors>

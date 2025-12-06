@@ -6,7 +6,7 @@
 		<Nullable>enable</Nullable>
 		<ApplicationIcon>logo.ico</ApplicationIcon>
 		<DocumentationFile>Durable.MySql.xml</DocumentationFile>
-		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<GeneratePackageOnBuild>False</GeneratePackageOnBuild>
 		<Title>Durable.MySql</Title>
 		<Version>0.1.21</Version>
 		<Authors>jchristn,joshclopton</Authors>

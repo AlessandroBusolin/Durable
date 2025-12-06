@@ -4,8 +4,8 @@
 		<TargetFrameworks>net6.0;net8.0</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<ApplicationIcon>logo.ico</ApplicationIcon>
 		<DocumentationFile>Durable.xml</DocumentationFile>
 		<Title>Durable</Title>

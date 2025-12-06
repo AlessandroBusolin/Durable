@@ -2,11 +2,11 @@
 
 	<PropertyGroup>
     <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
-		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<Nullable>enable</Nullable>
 		<ApplicationIcon>logo.ico</ApplicationIcon>
 		<DocumentationFile>Durable.Postgres.xml</DocumentationFile>
-		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<GeneratePackageOnBuild>False</GeneratePackageOnBuild>
 		<Title>Durable.Postgres</Title>
 		<Version>0.1.21</Version>
 		<Company>jchristn,joshclopton</Company>
