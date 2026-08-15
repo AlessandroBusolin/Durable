@@ -1,0 +1,621 @@
+﻿namespace Test.Shared
+{
+    using System;
+    using System.Collections.Generic;
+    using System.IO;
+    using System.Linq;
+    using System.Reflection;
+    using Durable;
+    using Durable.DefaultValueProviders;
+    using Durable.Sqlite;
+    using Xunit;
+    using Xunit.Abstractions;
+
+    /// <summary>
+    /// Tests for table initialization system including database creation, table creation,
+    /// validation, and default value providers
+    /// </summary>
+    public class InitializationTests : IDisposable
+    {
+        private readonly ITestOutputHelper _output;
+        private readonly string _testDatabasePath;
+        private readonly List<string> _createdDatabases;
+
+        /// <summary>
+        /// Initializes a new instance of the InitializationTests class.
+        /// </summary>
+        /// <param name="output">Test output helper for logging test results.</param>
+        public InitializationTests(ITestOutputHelper output)
+        {
+            _output = output;
+            _testDatabasePath = Path.Combine(Path.GetTempPath(), $"init_test_{Guid.NewGuid()}.db");
+            _createdDatabases = new List<string>();
+        }
+
+        /// <summary>
+        /// Disposes resources and cleans up test database files.
+        /// </summary>
+        public void Dispose()
+        {
+            // Clean up test databases
+            foreach (string dbPath in _createdDatabases)
+            {
+                try
+                {
+                    if (File.Exists(dbPath))
+                    {
+                        File.Delete(dbPath);
+                        _output.WriteLine($"Cleaned up test database: {dbPath}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _output.WriteLine($"Warning: Failed to delete test database {dbPath}: {ex.Message}");
+                }
+            }
+        }
+
+        #region Test Entities
+
+        /// <summary>
+        /// Test entity representing a product.
+        /// </summary>
+        [Entity("test_products")]
+        public class Product
+        {
+            /// <summary>
+            /// Gets or sets the product ID.
+            /// </summary>
+            [Property("id", Flags.PrimaryKey | Flags.AutoIncrement)]
+            public int Id { get; set; }
+
+            /// <summary>
+            /// Gets or sets the product name.
+            /// </summary>
+            [Property("name")]
+            public string Name { get; set; } = string.Empty;
+
+            /// <summary>
+            /// Gets or sets the UTC creation timestamp.
+            /// </summary>
+            [Property("created_utc")]
+            [DefaultValue(DefaultValueType.CurrentDateTimeUtc)]
+            public DateTime CreatedUtc { get; set; }
+
+            /// <summary>
+            /// Gets or sets the product GUID.
+            /// </summary>
+            [Property("guid")]
+            [DefaultValue(DefaultValueType.NewGuid)]
+            public Guid ProductGuid { get; set; }
+
+            /// <summary>
+            /// Gets or sets the product price.
+            /// </summary>
+            [Property("price")]
+            public decimal Price { get; set; }
+        }
+
+        /// <summary>
+        /// Test entity representing a category.
+        /// </summary>
+        [Entity("test_categories")]
+        public class Category
+        {
+            /// <summary>
+            /// Gets or sets the category ID.
+            /// </summary>
+            [Property("id", Flags.PrimaryKey | Flags.AutoIncrement)]
+            public int Id { get; set; }
+
+            /// <summary>
+            /// Gets or sets the category name.
+            /// </summary>
+            [Property("name")]
+            public string Name { get; set; } = string.Empty;
+
+            /// <summary>
+            /// Gets or sets the category GUID.
+            /// </summary>
+            [Property("guid")]
+            [DefaultValue(DefaultValueType.SequentialGuid)]
+            public Guid CategoryGuid { get; set; }
+        }
+
+        /// <summary>
+        /// Test entity representing an order.
+        /// </summary>
+        [Entity("test_orders")]
+        public class Order
+        {
+            /// <summary>
+            /// Gets or sets the order ID.
+            /// </summary>
+            [Property("id", Flags.PrimaryKey | Flags.AutoIncrement)]
+            public int Id { get; set; }
+
+            /// <summary>
+            /// Gets or sets the product ID.
+            /// </summary>
+            [Property("product_id")]
+            [ForeignKey(typeof(Product), nameof(Product.Id))]
+            public int ProductId { get; set; }
+
+            /// <summary>
+            /// Gets or sets the order quantity.
+            /// </summary>
+            [Property("quantity")]
+            public int Quantity { get; set; }
+
+            /// <summary>
+            /// Gets or sets the order date.
+            /// </summary>
+            [Property("order_date")]
+            [DefaultValue(DefaultValueType.CurrentDateTimeUtc)]
+            public DateTime OrderDate { get; set; }
+        }
+
+        /// <summary>
+        /// Invalid test entity without proper attributes (for validation testing).
+        /// </summary>
+        public class InvalidEntity
+        {
+            /// <summary>
+            /// Gets or sets the ID.
+            /// </summary>
+            public int Id { get; set; }
+
+            /// <summary>
+            /// Gets or sets the name.
+            /// </summary>
+            public string Name { get; set; } = string.Empty;
+        }
+
+        /// <summary>
+        /// Invalid test entity with attributes but no primary key (for validation testing).
+        /// </summary>
+        [Entity("invalid_no_pk")]
+        public class InvalidNoPrimaryKey
+        {
+            /// <summary>
+            /// Gets or sets the ID.
+            /// </summary>
+            [Property("id")]
+            public int Id { get; set; }
+
+            /// <summary>
+            /// Gets or sets the name.
+            /// </summary>
+            [Property("name")]
+            public string Name { get; set; } = string.Empty;
+        }
+
+        #endregion
+
+        #region Database Creation Tests
+
+        /// <summary>
+        /// Tests that CreateDatabaseIfNotExists creates a new database file.
+        /// </summary>
+        [Fact]
+        public void CreateDatabaseIfNotExists_CreatesNewDatabase()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"new_db_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            SqliteRepository<Product> repository = new SqliteRepository<Product>(settings);
+
+            // Act - Database creation should be implicit when using file-based database
+            // For SQLite, the database file is created when the connection is opened
+            repository.CreateDatabaseIfNotExists();
+
+            // Assert
+            Assert.True(File.Exists(dbPath), "Database file should be created");
+            _output.WriteLine($"âœ“ Database created successfully at: {dbPath}");
+        }
+
+        #endregion
+
+        #region Table Initialization Tests
+
+        /// <summary>
+        /// Tests that InitializeTable creates a new table in the database.
+        /// </summary>
+        [Fact]
+        public void InitializeTable_CreatesNewTable()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"init_table_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            SqliteRepository<Product> repository = new SqliteRepository<Product>(settings);
+
+            // Act
+            repository.InitializeTable(typeof(Product));
+
+            // Assert - Try to query the table to verify it exists
+            IEnumerable<Product> products = repository.Query().Execute();
+            Assert.NotNull(products);
+            Assert.Empty(products);
+            _output.WriteLine("âœ“ Table 'test_products' created successfully");
+        }
+
+        /// <summary>
+        /// Tests that InitializeTable is idempotent and does not fail when called multiple times.
+        /// </summary>
+        [Fact]
+        public void InitializeTable_DoesNotFailIfTableExists()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"init_exists_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            SqliteRepository<Product> repository = new SqliteRepository<Product>(settings);
+
+            // Act - Initialize twice
+            repository.InitializeTable(typeof(Product));
+            repository.InitializeTable(typeof(Product)); // Should not throw
+
+            // Assert
+            IEnumerable<Product> products = repository.Query().Execute();
+            Assert.NotNull(products);
+            _output.WriteLine("âœ“ InitializeTable is idempotent");
+        }
+
+        /// <summary>
+        /// Tests that InitializeTables can create multiple tables in a single call.
+        /// </summary>
+        [Fact]
+        public void InitializeTables_CreatesMultipleTables()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"init_multi_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            SqliteRepository<Product> productRepo = new SqliteRepository<Product>(settings);
+
+            Type[] entityTypes = new[] { typeof(Product), typeof(Category) };
+
+            // Act
+            productRepo.InitializeTables(entityTypes);
+
+            // Assert - Verify both tables exist
+            IEnumerable<Product> products = productRepo.Query().Execute();
+            Assert.NotNull(products);
+
+            SqliteRepository<Category> categoryRepo = new SqliteRepository<Category>(settings);
+            IEnumerable<Category> categories = categoryRepo.Query().Execute();
+            Assert.NotNull(categories);
+
+            _output.WriteLine("âœ“ Multiple tables created successfully");
+        }
+
+        /// <summary>
+        /// Tests that InitializeTable properly creates tables with foreign key relationships.
+        /// </summary>
+        [Fact]
+        public void InitializeTable_WithForeignKey_CreatesRelatedTables()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"init_fk_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            SqliteRepository<Product> productRepo = new SqliteRepository<Product>(settings);
+            SqliteRepository<Order> orderRepo = new SqliteRepository<Order>(settings);
+
+            // Act - Create parent table first, then child table with foreign key
+            productRepo.InitializeTable(typeof(Product));
+            orderRepo.InitializeTable(typeof(Order));
+
+            // Assert - Create a product and an order referencing it
+            Product product = new Product { Name = "Test Product", Price = 99.99m };
+            product = productRepo.Create(product);
+
+            Order order = new Order { ProductId = product.Id, Quantity = 5 };
+            order = orderRepo.Create(order);
+
+            Assert.True(order.Id > 0);
+            _output.WriteLine("âœ“ Foreign key relationship established successfully");
+        }
+
+        #endregion
+
+        #region Validation Tests
+
+        /// <summary>
+        /// Tests that ValidateTable returns true for a properly configured entity.
+        /// </summary>
+        [Fact]
+        public void ValidateTable_WithValidEntity_ReturnsTrue()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"validate_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            SqliteRepository<Product> repository = new SqliteRepository<Product>(settings);
+
+            // Act
+            bool isValid = repository.ValidateTable(typeof(Product), out List<string> errors, out List<string> warnings);
+
+            // Assert
+            Assert.True(isValid, "Product entity should be valid");
+            Assert.Empty(errors);
+            _output.WriteLine("âœ“ ValidateTable returned true for valid entity");
+        }
+
+        /// <summary>
+        /// Tests that ValidateTable returns false for an entity missing required attributes.
+        /// </summary>
+        [Fact]
+        public void ValidateTable_WithInvalidEntity_ReturnsFalse()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"validate_inv_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            // Use a valid repository to call ValidateTable on an invalid entity type
+            SqliteRepository<Product> repository = new SqliteRepository<Product>(settings);
+
+            // Act
+            bool isValid = repository.ValidateTable(typeof(InvalidEntity), out List<string> errors, out List<string> warnings);
+
+            // Assert
+            Assert.False(isValid, "InvalidEntity should not be valid");
+            Assert.NotEmpty(errors);
+            Assert.Contains(errors, e => e.Contains("Entity"));
+            _output.WriteLine($"âœ“ ValidateTable returned false with errors: {string.Join(", ", errors)}");
+        }
+
+        /// <summary>
+        /// Tests that ValidateTable returns false for an entity without a primary key.
+        /// </summary>
+        [Fact]
+        public void ValidateTable_WithNoPrimaryKey_ReturnsFalse()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"validate_no_pk_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            // Use a valid repository to call ValidateTable on an invalid entity type
+            SqliteRepository<Product> repository = new SqliteRepository<Product>(settings);
+
+            // Act
+            bool isValid = repository.ValidateTable(typeof(InvalidNoPrimaryKey), out List<string> errors, out List<string> warnings);
+
+            // Assert
+            Assert.False(isValid, "Entity without primary key should not be valid");
+            Assert.NotEmpty(errors);
+            Assert.Contains(errors, e => e.Contains("primary key"));
+            _output.WriteLine($"âœ“ ValidateTable correctly identified missing primary key");
+        }
+
+        /// <summary>
+        /// Tests that ValidateTables validates multiple entities and detects invalid ones.
+        /// </summary>
+        [Fact]
+        public void ValidateTables_ValidatesMultipleEntities()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"validate_multi_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            SqliteRepository<Product> repository = new SqliteRepository<Product>(settings);
+
+            Type[] entityTypes = new[] { typeof(Product), typeof(Category), typeof(InvalidEntity) };
+
+            // Act
+            bool isValid = repository.ValidateTables(entityTypes, out List<string> errors, out List<string> warnings);
+
+            // Assert
+            Assert.False(isValid, "Should fail because InvalidEntity is included");
+            Assert.NotEmpty(errors);
+            _output.WriteLine($"âœ“ ValidateTables found errors in mixed entity types: {errors.Count} errors");
+        }
+
+        #endregion
+
+        #region Default Value Provider Tests
+
+        /// <summary>
+        /// Tests that the CurrentDateTimeUtc default value provider sets the current UTC timestamp.
+        /// </summary>
+        [Fact]
+        public void DefaultValueProvider_CurrentDateTimeUtc_SetsValue()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"default_datetime_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            SqliteRepository<Product> repository = new SqliteRepository<Product>(settings);
+            repository.InitializeTable(typeof(Product));
+
+            DateTime beforeCreate = DateTime.UtcNow.AddSeconds(-1);
+
+            // Act
+            Product product = new Product { Name = "Test Product", Price = 99.99m };
+            // Don't set CreatedUtc - it should be set automatically
+            product = repository.Create(product);
+
+            DateTime afterCreate = DateTime.UtcNow.AddSeconds(1);
+
+            // Assert
+            Assert.True(product.CreatedUtc >= beforeCreate && product.CreatedUtc <= afterCreate,
+                $"CreatedUtc should be set to current UTC time. Got: {product.CreatedUtc}");
+            _output.WriteLine($"âœ“ CurrentDateTimeUtc provider set value: {product.CreatedUtc}");
+        }
+
+        /// <summary>
+        /// Tests that the NewGuid default value provider generates a new GUID.
+        /// </summary>
+        [Fact]
+        public void DefaultValueProvider_NewGuid_SetsValue()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"default_guid_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            SqliteRepository<Product> repository = new SqliteRepository<Product>(settings);
+            repository.InitializeTable(typeof(Product));
+
+            // Act
+            Product product = new Product { Name = "Test Product", Price = 99.99m };
+            // Don't set ProductGuid - it should be set automatically
+            product = repository.Create(product);
+
+            // Assert
+            Assert.NotEqual(Guid.Empty, product.ProductGuid);
+            _output.WriteLine($"âœ“ NewGuid provider set value: {product.ProductGuid}");
+        }
+
+        /// <summary>
+        /// Tests that the SequentialGuid default value provider generates sequential GUIDs.
+        /// </summary>
+        [Fact]
+        public void DefaultValueProvider_SequentialGuid_SetsValue()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"default_seqguid_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            SqliteRepository<Category> repository = new SqliteRepository<Category>(settings);
+            repository.InitializeTable(typeof(Category));
+
+            // Act - Create multiple categories to test sequential nature
+            Category category1 = new Category { Name = "Category 1" };
+            category1 = repository.Create(category1);
+
+            Category category2 = new Category { Name = "Category 2" };
+            category2 = repository.Create(category2);
+
+            // Assert
+            Assert.NotEqual(Guid.Empty, category1.CategoryGuid);
+            Assert.NotEqual(Guid.Empty, category2.CategoryGuid);
+            Assert.NotEqual(category1.CategoryGuid, category2.CategoryGuid);
+            _output.WriteLine($"âœ“ SequentialGuid provider set values: {category1.CategoryGuid}, {category2.CategoryGuid}");
+        }
+
+        /// <summary>
+        /// Tests that default value providers only apply when property values are at their default.
+        /// </summary>
+        [Fact]
+        public void DefaultValueProvider_OnlyAppliesWhenValueIsDefault()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"default_conditional_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+            SqliteRepository<Product> repository = new SqliteRepository<Product>(settings);
+            repository.InitializeTable(typeof(Product));
+
+            Guid customGuid = Guid.NewGuid();
+            DateTime customDate = new DateTime(2023, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+
+            // Act - Set values explicitly
+            Product product = new Product
+            {
+                Name = "Test Product",
+                Price = 99.99m,
+                ProductGuid = customGuid,
+                CreatedUtc = customDate
+            };
+            product = repository.Create(product);
+
+            // Assert - Custom values should be preserved
+            Assert.Equal(customGuid, product.ProductGuid);
+            Assert.Equal(customDate, product.CreatedUtc);
+            _output.WriteLine("âœ“ Default value providers did not override explicitly set values");
+        }
+
+        #endregion
+
+        #region Integration Tests
+
+        /// <summary>
+        /// Tests a full workflow of database initialization, table creation, validation, and data operations.
+        /// </summary>
+        [Fact]
+        public void FullWorkflow_InitializeAndUseDatabase()
+        {
+            // Arrange
+            string dbPath = Path.Combine(Path.GetTempPath(), $"full_workflow_{Guid.NewGuid()}.db");
+            _createdDatabases.Add(dbPath);
+            string connectionString = $"Data Source={dbPath}";
+
+            SqliteRepositorySettings settings = SqliteRepositorySettings.Parse(connectionString);
+
+            // Act - Full workflow
+            // Step 1: Create database (implicit for SQLite)
+            SqliteRepository<Product> productRepo = new SqliteRepository<Product>(settings);
+            productRepo.CreateDatabaseIfNotExists();
+
+            // Step 2: Initialize tables
+            productRepo.InitializeTables(new[] { typeof(Product), typeof(Category), typeof(Order) });
+
+            // Step 3: Validate tables
+            bool isValid = productRepo.ValidateTables(
+                new[] { typeof(Product), typeof(Category), typeof(Order) },
+                out List<string> errors,
+                out List<string> warnings);
+            Assert.True(isValid, $"Tables should be valid. Errors: {string.Join(", ", errors)}");
+
+            // Step 4: Create data with default values
+            Product product = productRepo.Create(new Product { Name = "Widget", Price = 19.99m });
+            Assert.NotEqual(Guid.Empty, product.ProductGuid);
+            Assert.NotEqual(default(DateTime), product.CreatedUtc);
+
+            SqliteRepository<Category> categoryRepo = new SqliteRepository<Category>(settings);
+            Category category = categoryRepo.Create(new Category { Name = "Electronics" });
+            Assert.NotEqual(Guid.Empty, category.CategoryGuid);
+
+            // Step 5: Create order with foreign key
+            SqliteRepository<Order> orderRepo = new SqliteRepository<Order>(settings);
+            Order order = orderRepo.Create(new Order { ProductId = product.Id, Quantity = 3 });
+            Assert.True(order.Id > 0);
+            Assert.NotEqual(default(DateTime), order.OrderDate);
+
+            // Step 6: Query data
+            List<Product> allProducts = productRepo.Query().Execute().ToList();
+            Assert.Single(allProducts);
+            Assert.Equal("Widget", allProducts[0].Name);
+
+            List<Order> allOrders = orderRepo.Query().Where(o => o.ProductId == product.Id).Execute().ToList();
+            Assert.Single(allOrders);
+            Assert.Equal(3, allOrders[0].Quantity);
+
+            _output.WriteLine("âœ“ Full initialization workflow completed successfully");
+            _output.WriteLine($"  - Created {allProducts.Count} products");
+            _output.WriteLine($"  - Created {allOrders.Count} orders");
+            _output.WriteLine($"  - All default values applied correctly");
+        }
+
+        #endregion
+    }
+}
+

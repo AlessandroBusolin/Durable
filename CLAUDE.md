@@ -27,11 +27,10 @@ src/
 ├── Durable.MySql/             # MySQL implementation
 ├── Durable.Postgres/          # PostgreSQL implementation
 ├── Durable.SqlServer/         # SQL Server implementation
-├── Test.Sqlite/               # SQLite tests
-├── Test.MySql/                # MySQL tests
-├── Test.Postgres/             # PostgreSQL tests
-├── Test.SqlServer/            # SQL Server tests
-├── Test.Shared/               # Shared test utilities and entities
+├── Test.Shared/               # Touchstone source of truth: entities, provider glue, and all test suites
+├── Test.Automated/            # Touchstone CLI runner (console); supports --docker for ephemeral DBs
+├── Test.Xunit/                # Touchstone xUnit adapter (dotnet test)
+├── Test.Nunit/                # Touchstone NUnit adapter (dotnet test)
 └── Sample.BlogApp.*/          # Sample applications per database
 ```
 
@@ -99,22 +98,29 @@ dotnet build src/Durable.sln -c Release
 
 ### Running Tests
 
+Tests are defined once in **Test.Shared** as runner-agnostic Touchstone descriptors (`DurableTestSuites.All`) and executed by three runners.
+
 ```bash
-# Run all tests
-dotnet test src/Durable.sln
+# xUnit and NUnit adapters (run against SQLite by default)
+dotnet test src/Test.Xunit/Test.Xunit.csproj
+dotnet test src/Test.Nunit/Test.Nunit.csproj
 
-# Run tests for a specific database provider
-dotnet test src/Test.Sqlite/Test.Sqlite.csproj
-dotnet test src/Test.MySql/Test.MySql.csproj
-dotnet test src/Test.Postgres/Test.Postgres.csproj
-dotnet test src/Test.SqlServer/Test.SqlServer.csproj
+# Touchstone CLI runner (console). Default: in-memory SQLite.
+dotnet run --project src/Test.Automated/Test.Automated.csproj -c Debug -f net8.0
 
-# Run integration tests (test projects can also be executed as console apps)
-cd src/Test.Sqlite
-dotnet run
+# Run against a specific provider using a disposable, auto-removed docker container
+dotnet run --project src/Test.Automated/Test.Automated.csproj -f net8.0 -- --type postgres --docker
+dotnet run --project src/Test.Automated/Test.Automated.csproj -f net8.0 -- --type mysql --docker
+dotnet run --project src/Test.Automated/Test.Automated.csproj -f net8.0 -- --type sqlserver --docker
+
+# Or point at an existing server: --type <provider> --host <h> --port <p> --user <u> --pass <p> --database <db>
+# Use --help to list all options.
 ```
 
-**Note**: Test projects are dual-purpose - they can run as xUnit test suites via `dotnet test` OR as console applications via `dotnet run` for interactive/integration testing.
+**Notes**:
+- The xUnit/NUnit adapters and the CLI all consume the same Touchstone suites in `Test.Shared`, so coverage stays in sync.
+- Provider selection for the adapters can also be set via environment variables (`DURABLE_TEST_DB`, `DURABLE_TEST_HOST`, etc.).
+- Set operations (UNION/INTERSECT/EXCEPT) run on SQLite and PostgreSQL only; many-to-many `Include` runs on SQLite only — the other providers have known SQL-generation gaps.
 
 ### Creating NuGet Packages
 
@@ -496,15 +502,20 @@ Each provider has its own `ExpressionParser` that converts LINQ expressions to S
 
 ## Testing Strategy
 
-Test projects use xUnit and are organized by database provider. They include:
-- Unit tests for individual operations
-- Integration tests for complex scenarios
-- Concurrency tests for optimistic locking
-- Relationship/Include tests
-- Transaction tests
-- Sanitization tests
+Tests use the **Touchstone** framework: each case is authored once in `Test.Shared` and surfaced identically to the CLI runner (Test.Automated), the xUnit adapter (Test.Xunit), and the NUnit adapter (Test.Nunit). Provider-agnostic behavioral suites (`IRepositoryProvider`-based) run against whichever provider is configured (SQLite by default, or MySQL/PostgreSQL/SQL Server via docker or an external server). Coverage includes:
+- CRUD, querying, ordering, pagination, aggregation
+- Data-type round-tripping
+- Include/Join and relationship loading
+- Optimistic concurrency and conflict resolution
+- Batch insert/update/delete
+- Schema management and indexes
+- Connection-pool stress
+- Group-by / having, projections, complex expression translation
+- Transactions (commit/rollback, sync + async)
+- Negative / edge cases (not-found, empty sets, single-result violations)
+- SQLite-specific unit suites (data-type converter, repository settings, initialization)
 
-Test entities are defined in `Test.Shared` and reused across all provider tests.
+Test entities and the four `IRepositoryProvider` implementations live in `Test.Shared`.
 
 ## Common Patterns
 
