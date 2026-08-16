@@ -49,6 +49,7 @@ namespace Test.Shared
                 suites.Add(SharedSuite<ProjectionTestSuite>("Projection", "Projection / Select Tests", providerTag, BeforeEach));
                 suites.Add(SharedSuite<ComplexExpressionTestSuite>("ComplexExpression", "Complex Expression Tests", providerTag, BeforeEach));
                 suites.Add(SharedSuite<RelationshipTestSuite>("Relationship", "Relationship / Async Streaming Tests", providerTag, BeforeEach));
+                suites.Add(SharedSuite<RepositoryOperationsTestSuite>("RepositoryOperations", "Repository Operations (Raw SQL / Batch / Upsert) Tests", providerTag, BeforeEach));
                 suites.Add(SharedSuite<TransactionTestSuite>("Transaction", "Transaction Tests", providerTag, BeforeEach));
 
                 // Set operations (UNION / INTERSECT / EXCEPT) are only supported by the SQLite and PostgreSQL

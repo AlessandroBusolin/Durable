@@ -7,7 +7,7 @@
 		<DocumentationFile>Durable.Sqlite.xml</DocumentationFile>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>Durable.Sqlite</Title>
-		<Version>0.1.21</Version>
+		<Version>0.2.0</Version>
 		<Authors>jchristn,joshclopton</Authors>
 		<Description>A lightweight .NET ORM library with LINQ capabilities, designed with a clean, generic architecture that allows developers to build custom repository implementations without being constrained by opinionated base classes</Description>
 		<Copyright>(c)2025 Durable Community</Copyright>
@@ -17,7 +17,7 @@
 		<RepositoryUrl>https://github.com/jchristn/durable</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageTags>mysql;linq;postgres;orm;database;sqlite;postgresql;sqlserver;ef;sql</PackageTags>
-		<PackageReleaseNotes>Initial alpha release</PackageReleaseNotes>
+		<PackageReleaseNotes>Updated Microsoft.Data.Sqlite dependency to 10.0.11.</PackageReleaseNotes>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
 		<IncludeSymbols>True</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
@@ -43,7 +43,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.6" />
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -9,7 +9,7 @@
 		<ApplicationIcon>logo.ico</ApplicationIcon>
 		<DocumentationFile>Durable.xml</DocumentationFile>
 		<Title>Durable</Title>
-		<Version>0.1.21</Version>
+		<Version>0.2.0</Version>
 		<Authors>jchristn,joshclopton</Authors>
 		<Description>A lightweight .NET ORM library with LINQ capabilities, designed with a clean, generic architecture that allows developers to build custom repository implementations without being constrained by opinionated base classes</Description>
 		<Copyright>(c)2025 Durable Community</Copyright>
@@ -19,7 +19,7 @@
 		<RepositoryUrl>https://github.com/jchristn/durable</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageTags>mysql;linq;postgres;orm;database;sqlite;postgresql;sqlserver;ef;sql</PackageTags>
-		<PackageReleaseNotes>Initial alpha release</PackageReleaseNotes>
+		<PackageReleaseNotes>Updated database provider dependencies to their latest versions (Npgsql 10, Microsoft.Data.SqlClient 7, Microsoft.Data.Sqlite 10, MySqlConnector 2.6).</PackageReleaseNotes>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
 		<IncludeSymbols>True</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
